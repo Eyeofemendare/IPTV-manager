@@ -10,6 +10,8 @@ import {
   Code2,
   FileCode,
   Terminal,
+  Sparkles,
+  Workflow,
 } from 'lucide-react';
 
 interface GithubHostingModalProps {
@@ -125,28 +127,75 @@ git push -u origin main
               <span>Πού βρίσκεται το GitHub Pages & Πώς γίνεται το Deploy;</span>
             </h4>
             <div className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-lg space-y-1">
-              <p className="font-semibold">💡 Σημαντική διευκρίνιση για το "Deploy στο Pages":</p>
+              <p className="font-semibold">💡 Γιατί βλέπετε λευκή οθόνη (White Screen) & Πώς λύνεται σε 1 λεπτό:</p>
               <p className="text-slate-300">
-                Η επιλογή <strong>Pages</strong> δεν είναι κουμπί μέσα στην εφαρμογή αυτή, αλλά βρίσκεται <strong>μέσα στην ιστοσελίδα του GitHub</strong>, στις ρυθμίσεις του αποθετηρίου σας (Repository Settings).
+                Επειδή η εφαρμογή είναι σύγχρονο React/Vite project (TypeScript), τα αρχεία πρέπει να γίνουν <strong>build</strong> από το GitHub.
               </p>
             </div>
             <ol className="list-decimal list-inside space-y-2 text-slate-300 text-xs pt-1">
               <li>
-                <strong>Εξαγωγή / Ανέβασμα:</strong> Εξάγετε τον κώδικα στο GitHub μέσω του μενού της εφαρμογής (Settings ➔ Export to GitHub) ή ανεβάστε τα αρχεία σας σε νέο repository.
+                <strong>Μετάβαση στο αποθετήριο:</strong> Ανοίξτε το <a href="https://github.com/eyeofemendare/IPTV-manager" target="_blank" rel="noreferrer" className="text-emerald-400 underline font-mono">github.com/eyeofemendare/IPTV-manager</a>.
               </li>
               <li>
-                <strong>Μετάβαση στο GitHub:</strong> Ανοίξτε το αποθετήριό σας στο <a href="https://github.com" target="_blank" rel="noreferrer" className="text-emerald-400 underline">github.com</a>.
+                <strong>Ρυθμίσεις Pages:</strong> Κάντε κλικ στην καρτέλα <strong>Settings</strong> ➔ στο αριστερό μενού πατήστε <strong>Pages</strong>.
               </li>
               <li>
-                <strong>Ρυθμίσεις Pages:</strong> Κάντε κλικ στην καρτέλα <strong>Settings</strong> (στο πάνω μέρος του αποθετηρίου) ➔ στο αριστερό μενού πατήστε <strong>Pages</strong>.
+                <strong>Επιλογή Source (Πολύ σημαντικό):</strong><br />
+                Στο πεδίο <em>Build and deployment ➔ Source</em>, αλλάξτε το από <em>«Deploy from a branch»</em> σε:
+                <div className="my-1.5 p-2 bg-emerald-500/10 border border-emerald-500/30 rounded text-emerald-300 font-bold">
+                  👉 Επιλέξτε: <u>GitHub Actions</u>
+                </div>
               </li>
               <li>
-                <strong>Ενεργοποίηση:</strong> Στο πεδίο <em>Build and deployment ➔ Source</em> επιλέξτε <strong>Deploy from a branch</strong>, διαλέξτε branch <strong>main</strong> και φάκελο <strong>/ (root)</strong> και πατήστε <strong>Save</strong>.
-              </li>
-              <li>
-                Σε 1–2 λεπτά, το GitHub θα σας δώσει το live link της μορφής: <code className="text-emerald-400 font-bold font-mono">https://&lt;username&gt;.github.io/&lt;repo&gt;/</code>!
+                Το GitHub θα εντοπίσει το αρχείο <code className="text-cyan-400 font-mono">deploy-pages.yml</code> (ή μπορείτε να επιλέξετε το προτεινόμενο Vite / Static HTML workflow του GitHub), θα κάνει αυτόματα το build και σε 1 λεπτό το site θα ανοίγει κανονικά στο:
+                <div className="mt-1 font-mono text-emerald-400 font-bold">https://eyeofemendare.github.io/IPTV-manager/</div>
               </li>
             </ol>
+          </div>
+
+          {/* Section 2: GitHub Action Workflow Automation */}
+          <div className="bg-slate-950 p-4 rounded-xl border border-cyan-500/30 space-y-3">
+            <h4 className="font-bold text-white text-sm flex items-center gap-2">
+              <Workflow className="w-4 h-4 text-cyan-400" />
+              <span>Βήμα 2: Πώς ρυθμίζεται το GitHub Action Workflow (Αυτόματος Συγχρονισμός);</span>
+            </h4>
+            
+            <div className="text-xs text-slate-300 space-y-1.5 leading-relaxed">
+              <p>
+                <strong>Χρειάζεται απαραίτητα το workflow;</strong>
+              </p>
+              <ul className="list-disc list-inside text-slate-400 space-y-1">
+                <li><strong className="text-slate-200">Όχι:</strong> Αν θέλετε απλώς να παίζει η λίστα σας στην τηλεόραση (χρησιμοποιείτε απευθείας το M3U link ή το αρχείο).</li>
+                <li><strong className="text-slate-200">Ναι:</strong> Αν θέλετε το GitHub να μπαίνει μόνο του καθημερινά (χωρίς ανοιχτό υπολογιστή) και να ανανεώνει EPG και streams αυτόματα!</li>
+              </ul>
+            </div>
+
+            <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800 space-y-2 text-xs text-slate-300">
+              <p className="font-semibold text-cyan-300 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Οδηγός Δημιουργίας (Μέσα στο GitHub):</span>
+              </p>
+              <ol className="list-decimal list-inside space-y-1.5 text-slate-300">
+                <li>
+                  Στο repository σας στο GitHub, πατήστε <strong>Add file ➔ Create new file</strong>.
+                </li>
+                <li>
+                  Στο πεδίο ονόματος πληκτρολογήστε:
+                  <code className="text-emerald-400 font-bold font-mono bg-slate-950 px-2 py-0.5 rounded border border-slate-800 block sm:inline-block my-1">
+                    .github/workflows/iptv-sync.yml
+                  </code>
+                </li>
+                <li>
+                  Κάντε επικόλληση του κώδικα YAML (τον αντιγράφετε με το κουμπί <em>«Αντιγραφή Workflow»</em> στο Βήμα 4).
+                </li>
+                <li>
+                  Πατήστε <strong>Commit changes...</strong>.
+                </li>
+                <li>
+                  <strong>Δικαίωμα εγγραφής:</strong> Πηγαίνετε <em>Settings ➔ Actions ➔ General ➔ Workflow permissions</em>, επιλέξτε <strong>Read and write permissions</strong> και πατήστε <strong>Save</strong>.
+                </li>
+              </ol>
+            </div>
           </div>
 
           {/* Quick Terminal Snippet */}
