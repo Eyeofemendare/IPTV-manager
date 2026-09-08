@@ -83,3 +83,13 @@ export interface SyncSchedule {
   autoRefresh: boolean;
   playlistName: string;
 }
+
+export interface SavedAccountProfile {
+  id: string;
+  name: string;
+  sourceConfig: SourceConfig;
+  notes?: string;
+  isFavorite?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}

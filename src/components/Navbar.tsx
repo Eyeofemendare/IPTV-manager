@@ -1,19 +1,31 @@
 import React from 'react';
-import { Tv, Sparkles, CheckCircle2, RotateCcw, Github, Smartphone, ShieldCheck } from 'lucide-react';
-import { Channel } from '../types';
+import { Tv, Sparkles, CheckCircle2, RotateCcw, Github, Smartphone, ShieldCheck, Bookmark, ChevronDown } from 'lucide-react';
+import { Channel, SavedAccountProfile } from '../types';
 
 interface NavbarProps {
   channels: Channel[];
+  savedProfiles?: SavedAccountProfile[];
+  activeProfileId?: string | null;
+  onOpenSavedAccounts?: () => void;
   onResetToDemo: () => void;
   onOpenGithubGuide: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ channels, onResetToDemo, onOpenGithubGuide }) => {
+export const Navbar: React.FC<NavbarProps> = ({
+  channels,
+  savedProfiles = [],
+  activeProfileId,
+  onOpenSavedAccounts,
+  onResetToDemo,
+  onOpenGithubGuide,
+}) => {
   const totalChannels = channels.length;
   const selectedChannels = channels.filter((c) => c.selected).length;
   const mappedCount = channels.filter((c) => c.selected && (c.epgId || c.tvgId)).length;
   const reductionPercent = totalChannels > 0 ? Math.round(((totalChannels - selectedChannels) / totalChannels) * 100) : 0;
   const epgPercent = selectedChannels > 0 ? Math.round((mappedCount / selectedChannels) * 100) : 0;
+
+  const activeProfile = savedProfiles.find((p) => p.id === activeProfileId);
 
   return (
     <header id="iptv-navbar" className="sticky top-0 z-40 bg-[#0b0f17]/90 backdrop-blur-md border-b border-slate-800/80 px-4 lg:px-8 py-3 transition-all">
@@ -66,6 +78,27 @@ export const Navbar: React.FC<NavbarProps> = ({ channels, onResetToDemo, onOpenG
                 <span className="text-slate-500 text-[11px]">({mappedCount}/{selectedChannels})</span>
               </div>
             </>
+          )}
+
+          {/* Saved Accounts Button */}
+          {onOpenSavedAccounts && (
+            <button
+              id="btn-navbar-saved-accounts"
+              onClick={onOpenSavedAccounts}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg transition"
+              title="Διαχείριση αποθηκευμένων λογαριασμών IPTV"
+            >
+              <Bookmark className="w-3.5 h-3.5 fill-amber-400/30" />
+              <span className="max-w-[130px] truncate hidden sm:inline">
+                {activeProfile ? activeProfile.name : 'Λογαριασμοί'}
+              </span>
+              <span className="sm:hidden">Λογαριασμοί</span>
+              {savedProfiles.length > 0 && (
+                <span className="bg-amber-500/20 px-1 py-0.2 rounded text-[10px] font-bold">
+                  {savedProfiles.length}
+                </span>
+              )}
+            </button>
           )}
 
           {/* Reset button */}

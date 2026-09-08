@@ -13,29 +13,49 @@ import { Step4CloudSync } from './components/Step4CloudSync';
 import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { ManualEpgModal } from './components/ManualEpgModal';
 import { GithubHostingModal } from './components/GithubHostingModal';
-import { Channel, EpgChannel, SourceConfig, SyncSchedule } from './types';
+import { SavedAccountsModal } from './components/SavedAccountsModal';
+import { Channel, EpgChannel, SourceConfig, SyncSchedule, SavedAccountProfile } from './types';
 import { INITIAL_DEMO_CHANNELS } from './data/demoData';
 import { EPG_PRESETS, GREEK_EPG_DATABASE, getPresetChannels } from './data/epgPresets';
 import { parseXMLTV } from './utils/xmltvParser';
 import { parseM3U } from './utils/m3uParser';
 import { runAutoMatchOnChannels } from './utils/epgMatcher';
+import { getSavedProfiles, upsertProfile, getActiveProfileId, setActiveProfileId } from './utils/profileStorage';
 
 export default function App() {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [channels, setChannels] = useState<Channel[]>(INITIAL_DEMO_CHANNELS);
   const [epgDatabase, setEpgDatabase] = useState<EpgChannel[]>(GREEK_EPG_DATABASE);
 
-  const [sourceConfig, setSourceConfig] = useState<SourceConfig>({
-    type: 'demo',
-    m3uUrl: '',
-    xtreamServer: '',
-    xtreamUser: '',
-    xtreamPass: '',
-    epgUrl: 'https://iptv-manager.cloud/epg/greece.xml',
-    customEpgUrl: '',
-    epgPresetId: 'greek_default',
-    epgSourceType: 'preset',
-    loadedAt: 'Προεπιλεγμένο Demo',
+  // Saved Account Profiles (Local Storage)
+  const [savedProfiles, setSavedProfiles] = useState<SavedAccountProfile[]>(() => getSavedProfiles());
+  const [activeProfileId, setActiveProfileIdState] = useState<string | null>(() => {
+    const active = getActiveProfileId();
+    if (active) return active;
+    const initial = getSavedProfiles();
+    return initial[0]?.id || null;
+  });
+  const [isSavedAccountsModalOpen, setIsSavedAccountsModalOpen] = useState<boolean>(false);
+
+  const [sourceConfig, setSourceConfig] = useState<SourceConfig>(() => {
+    const initialProfiles = getSavedProfiles();
+    const activeId = getActiveProfileId();
+    const matched = initialProfiles.find((p) => p.id === activeId) || initialProfiles[0];
+    if (matched && matched.sourceConfig) {
+      return matched.sourceConfig;
+    }
+    return {
+      type: 'demo',
+      m3uUrl: '',
+      xtreamServer: '',
+      xtreamUser: '',
+      xtreamPass: '',
+      epgUrl: 'https://iptv-manager.cloud/epg/greece.xml',
+      customEpgUrl: '',
+      epgPresetId: 'greek_default',
+      epgSourceType: 'preset',
+      loadedAt: 'Προεπιλεγμένο Demo',
+    };
   });
 
   const [syncSchedule, setSyncSchedule] = useState<SyncSchedule>({
@@ -127,6 +147,47 @@ export default function App() {
     setCurrentStep(1);
   };
 
+  // Select saved profile
+  const handleSelectProfile = (profile: SavedAccountProfile) => {
+    setSourceConfig(profile.sourceConfig);
+    setActiveProfileIdState(profile.id);
+    setActiveProfileId(profile.id);
+
+    // If profile had a preset EPG, switch DB
+    if (profile.sourceConfig.epgSourceType === 'preset' && profile.sourceConfig.epgPresetId) {
+      const channelsForPreset = getPresetChannels(profile.sourceConfig.epgPresetId);
+      setEpgDatabase(channelsForPreset);
+    }
+
+    // If demo profile, restore demo channels
+    if (profile.sourceConfig.type === 'demo') {
+      setChannels(INITIAL_DEMO_CHANNELS);
+    }
+  };
+
+  // Save current config as profile
+  const handleSaveCurrentAsProfile = (name: string, notes?: string) => {
+    const { updatedProfiles, savedProfile } = upsertProfile({
+      name,
+      sourceConfig,
+      notes,
+    });
+    setSavedProfiles(updatedProfiles);
+    setActiveProfileIdState(savedProfile.id);
+  };
+
+  // Update profiles list from modal
+  const handleUpdateProfilesList = (updated: SavedAccountProfile[], activeId?: string) => {
+    setSavedProfiles(updated);
+    if (activeId) {
+      setActiveProfileIdState(activeId);
+      const matched = updated.find((p) => p.id === activeId);
+      if (matched) {
+        setSourceConfig(matched.sourceConfig);
+      }
+    }
+  };
+
   // Toggle group selection
   const handleToggleGroup = (groupName: string, selectAll: boolean) => {
     setChannels((prev) =>
@@ -215,6 +276,9 @@ export default function App() {
       {/* Top Navigation */}
       <Navbar
         channels={channels}
+        savedProfiles={savedProfiles}
+        activeProfileId={activeProfileId}
+        onOpenSavedAccounts={() => setIsSavedAccountsModalOpen(true)}
         onResetToDemo={handleResetToDemo}
         onOpenGithubGuide={() => setIsGithubModalOpen(true)}
       />
@@ -241,6 +305,11 @@ export default function App() {
             epgDatabase={epgDatabase}
             onSelectEpgPreset={handleSelectEpgPreset}
             onLoadCustomXmltv={handleLoadCustomXmltv}
+            savedProfiles={savedProfiles}
+            activeProfileId={activeProfileId}
+            onSelectProfile={handleSelectProfile}
+            onOpenSavedAccountsModal={() => setIsSavedAccountsModalOpen(true)}
+            onSaveCurrentAsProfile={handleSaveCurrentAsProfile}
           />
         )}
 
@@ -307,6 +376,17 @@ export default function App() {
       <GithubHostingModal
         isOpen={isGithubModalOpen}
         onClose={() => setIsGithubModalOpen(false)}
+      />
+
+      {/* Saved Accounts & Profiles Management Modal */}
+      <SavedAccountsModal
+        isOpen={isSavedAccountsModalOpen}
+        onClose={() => setIsSavedAccountsModalOpen(false)}
+        savedProfiles={savedProfiles}
+        activeProfileId={activeProfileId}
+        currentSourceConfig={sourceConfig}
+        onSelectProfile={handleSelectProfile}
+        onUpdateProfilesList={handleUpdateProfilesList}
       />
 
       {/* Footer */}

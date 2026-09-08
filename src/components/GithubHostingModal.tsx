@@ -122,14 +122,30 @@ git push -u origin main
           <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
             <h4 className="font-bold text-white text-sm flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>Βήματα Ανεβάσματος στο GitHub</span>
+              <span>Πού βρίσκεται το GitHub Pages & Πώς γίνεται το Deploy;</span>
             </h4>
-            <ol className="list-decimal list-inside space-y-1 text-slate-300 text-xs">
-              <li>Δημιουργήστε ένα νέο Public repository στο λογαριασμό σας στο GitHub (π.χ. <code className="text-emerald-400">iptv-manager</code>).</li>
-              <li>Ανεβάστε τα αρχεία του project (ή χρησιμοποιήστε το build output <code className="text-cyan-400">dist/</code>).</li>
-              <li>Στο GitHub, μεταβείτε στις <strong>Settings ➔ Pages</strong>.</li>
-              <li>Στο πεδίο <em>Branch</em>, επιλέξτε <strong>main</strong> (ή <strong>gh-pages</strong>) και φάκελο <strong>/ (root)</strong>.</li>
-              <li>Σε 1 λεπτό, η σελίδα σας θα είναι live στο: <code className="text-emerald-400 font-bold font-mono">https://&lt;username&gt;.github.io/iptv-manager/</code>!</li>
+            <div className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-lg space-y-1">
+              <p className="font-semibold">💡 Σημαντική διευκρίνιση για το "Deploy στο Pages":</p>
+              <p className="text-slate-300">
+                Η επιλογή <strong>Pages</strong> δεν είναι κουμπί μέσα στην εφαρμογή αυτή, αλλά βρίσκεται <strong>μέσα στην ιστοσελίδα του GitHub</strong>, στις ρυθμίσεις του αποθετηρίου σας (Repository Settings).
+              </p>
+            </div>
+            <ol className="list-decimal list-inside space-y-2 text-slate-300 text-xs pt-1">
+              <li>
+                <strong>Εξαγωγή / Ανέβασμα:</strong> Εξάγετε τον κώδικα στο GitHub μέσω του μενού της εφαρμογής (Settings ➔ Export to GitHub) ή ανεβάστε τα αρχεία σας σε νέο repository.
+              </li>
+              <li>
+                <strong>Μετάβαση στο GitHub:</strong> Ανοίξτε το αποθετήριό σας στο <a href="https://github.com" target="_blank" rel="noreferrer" className="text-emerald-400 underline">github.com</a>.
+              </li>
+              <li>
+                <strong>Ρυθμίσεις Pages:</strong> Κάντε κλικ στην καρτέλα <strong>Settings</strong> (στο πάνω μέρος του αποθετηρίου) ➔ στο αριστερό μενού πατήστε <strong>Pages</strong>.
+              </li>
+              <li>
+                <strong>Ενεργοποίηση:</strong> Στο πεδίο <em>Build and deployment ➔ Source</em> επιλέξτε <strong>Deploy from a branch</strong>, διαλέξτε branch <strong>main</strong> και φάκελο <strong>/ (root)</strong> και πατήστε <strong>Save</strong>.
+              </li>
+              <li>
+                Σε 1–2 λεπτά, το GitHub θα σας δώσει το live link της μορφής: <code className="text-emerald-400 font-bold font-mono">https://&lt;username&gt;.github.io/&lt;repo&gt;/</code>!
+              </li>
             </ol>
           </div>
 

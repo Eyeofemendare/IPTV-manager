@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Layers,
   Upload,
@@ -18,8 +18,14 @@ import {
   Compass,
   Check,
   Zap,
+  Bookmark,
+  Save,
+  Star,
+  HardDrive,
+  FolderLock,
+  Plus,
 } from 'lucide-react';
-import { SourceConfig, PingResult, EpgChannel } from '../types';
+import { SourceConfig, PingResult, EpgChannel, SavedAccountProfile } from '../types';
 import { testConnectionPing, buildXtreamM3uUrl, buildXtreamEpgUrl } from '../utils/xtreamHelper';
 import { EPG_PRESETS } from '../data/epgPresets';
 import { parseXMLTV } from '../utils/xmltvParser';
@@ -34,6 +40,11 @@ interface Step1SourcesProps {
   epgDatabase: EpgChannel[];
   onSelectEpgPreset: (presetId: string) => void;
   onLoadCustomXmltv: (xmlContent: string, sourceName: string, customUrl?: string) => void;
+  savedProfiles?: SavedAccountProfile[];
+  activeProfileId?: string | null;
+  onSelectProfile?: (profile: SavedAccountProfile) => void;
+  onOpenSavedAccountsModal?: () => void;
+  onSaveCurrentAsProfile?: (name: string, notes?: string) => void;
 }
 
 export const Step1Sources: React.FC<Step1SourcesProps> = ({
@@ -46,6 +57,11 @@ export const Step1Sources: React.FC<Step1SourcesProps> = ({
   epgDatabase,
   onSelectEpgPreset,
   onLoadCustomXmltv,
+  savedProfiles = [],
+  activeProfileId,
+  onSelectProfile,
+  onOpenSavedAccountsModal,
+  onSaveCurrentAsProfile,
 }) => {
   const [activeTab, setActiveTab] = useState<'demo' | 'm3u_url' | 'm3u_file' | 'xtream'>(sourceConfig.type);
   const [pingResult, setPingResult] = useState<PingResult>({
@@ -55,6 +71,16 @@ export const Step1Sources: React.FC<Step1SourcesProps> = ({
   });
   const [isLoadingUrl, setIsLoadingUrl] = useState(false);
   const [urlFetchError, setUrlFetchError] = useState<string | null>(null);
+
+  // Inline profile save states
+  const [showInlineSave, setShowInlineSave] = useState(false);
+  const [inlineProfileName, setInlineProfileName] = useState('');
+  const [inlineProfileNotes, setInlineProfileNotes] = useState('');
+
+  // Sync activeTab if sourceConfig type changes (e.g. when loading a profile)
+  useEffect(() => {
+    setActiveTab(sourceConfig.type);
+  }, [sourceConfig.type]);
 
   // Custom XMLTV states
   const [customXmltvUrl, setCustomXmltvUrl] = useState<string>(
@@ -282,6 +308,202 @@ export const Step1Sources: React.FC<Step1SourcesProps> = ({
         )}
       </div>
 
+      {/* SECTION 0: SAVED ACCOUNTS & PROFILES (LOCAL STORAGE) */}
+      <div className="bg-slate-900/80 border border-slate-800 p-4 sm:p-5 rounded-2xl shadow-lg space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+              <Bookmark className="w-4 h-4 fill-amber-400/20" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-white">
+                  Αποθηκευμένοι Λογαριασμοί IPTV (Local Storage)
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 font-bold">
+                  {savedProfiles.length} {savedProfiles.length === 1 ? 'προφίλ' : 'προφίλ'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Τοπική αποθήκευση συνδρομών για αποφυγή επαναπληκτρολόγησης και εύκολη εναλλαγή παρόχων.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Quick Profile Select Dropdown */}
+            {savedProfiles.length > 0 && onSelectProfile && (
+              <select
+                id="select-active-profile"
+                value={activeProfileId || ''}
+                onChange={(e) => {
+                  const target = savedProfiles.find((p) => p.id === e.target.value);
+                  if (target) onSelectProfile(target);
+                }}
+                className="bg-slate-950 border border-slate-700 text-xs font-semibold text-white rounded-xl px-3 py-2 focus:outline-none focus:border-amber-500 cursor-pointer"
+                title="Επιλογή αποθηκευμένου προφίλ"
+              >
+                {savedProfiles.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.isFavorite ? '★ ' : ''}
+                    {p.name} (
+                    {p.sourceConfig.type === 'xtream'
+                      ? 'Xtream'
+                      : p.sourceConfig.type === 'm3u_url'
+                      ? 'M3U URL'
+                      : p.sourceConfig.type === 'm3u_file'
+                      ? 'Αρχείο'
+                      : 'Demo'}
+                    )
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {/* Quick Save Current Button */}
+            {onSaveCurrentAsProfile && (
+              <button
+                id="btn-quick-save-profile"
+                type="button"
+                onClick={() => {
+                  setInlineProfileName(
+                    sourceConfig.type === 'xtream' && sourceConfig.xtreamServer
+                      ? `Xtream: ${sourceConfig.xtreamServer.replace(/^https?:\/\//, '').split(':')[0]}`
+                      : sourceConfig.type === 'm3u_url'
+                      ? 'M3U Web Playlist'
+                      : 'Συνδρομή IPTV'
+                  );
+                  setShowInlineSave((v) => !v);
+                }}
+                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition"
+                title="Αποθήκευση τρεχόντων στοιχείων ως νέο προφίλ"
+              >
+                <Save className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Αποθήκευση</span>
+              </button>
+            )}
+
+            {/* Manage Accounts Modal Opener */}
+            {onOpenSavedAccountsModal && (
+              <button
+                id="btn-open-saved-accounts-modal"
+                type="button"
+                onClick={onOpenSavedAccountsModal}
+                className="px-3 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition"
+                title="Πλήρης διαχείριση λογαριασμών (Backup, Επεξεργασία, Ping, Διαγραφή)"
+              >
+                <FolderLock className="w-3.5 h-3.5" />
+                <span>Διαχείριση</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Quick Profile Chips Row */}
+        {savedProfiles.length > 1 && onSelectProfile && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-800/80">
+            <span className="text-[11px] text-slate-500 font-medium mr-1">Γρήγορη Εναλλαγή:</span>
+            {savedProfiles.map((p) => {
+              const isSelected = p.id === activeProfileId;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => onSelectProfile(p)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+                    isSelected
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                      : 'bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  {p.isFavorite && <Star className="w-3 h-3 text-amber-400 fill-amber-400" />}
+                  <span>{p.name}</span>
+                  <span className="text-[10px] text-slate-500 uppercase">
+                    {p.sourceConfig.type === 'xtream' ? 'Xtream' : p.sourceConfig.type === 'm3u_url' ? 'M3U' : 'Demo'}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Inline Save Form */}
+        {showInlineSave && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (inlineProfileName.trim() && onSaveCurrentAsProfile) {
+                onSaveCurrentAsProfile(inlineProfileName.trim(), inlineProfileNotes.trim());
+                setShowInlineSave(false);
+                setInlineProfileName('');
+                setInlineProfileNotes('');
+              }
+            }}
+            className="bg-slate-950 border border-emerald-500/40 p-4 rounded-xl space-y-3 pt-3 animate-in fade-in duration-150"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                <Save className="w-3.5 h-3.5" />
+                <span>Αποθήκευση Τρέχουσας Πηγής & EPG τοπικά (Local Storage)</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowInlineSave(false)}
+                className="text-xs text-slate-400 hover:text-white"
+              >
+                Ακύρωση
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-300 block mb-1">
+                  Όνομα Λογαριασμού / Προφίλ *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="π.χ. Σπίτι - Xtream TV"
+                  value={inlineProfileName}
+                  onChange={(e) => setInlineProfileName(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-300 block mb-1">
+                  Σημειώσεις / Ημ. Λήξης (Προαιρετικό)
+                </label>
+                <input
+                  type="text"
+                  placeholder="π.χ. Λήγει 31/12/2026"
+                  value={inlineProfileNotes}
+                  onChange={(e) => setInlineProfileNotes(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowInlineSave(false)}
+                className="px-3 py-1 text-xs text-slate-400 hover:text-white"
+              >
+                Ακύρωση
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg flex items-center gap-1.5 transition"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Αποθήκευση Προφίλ</span>
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+
       {/* SECTION 1: PLAYLIST SOURCE TABS */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -447,6 +669,21 @@ export const Step1Sources: React.FC<Step1SourcesProps> = ({
                   {isLoadingUrl ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Layers className="w-4 h-4" />}
                   <span>Ανάκτηση</span>
                 </button>
+                {onSaveCurrentAsProfile && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInlineProfileName('M3U Web Playlist');
+                      setShowInlineSave(true);
+                    }}
+                    disabled={!sourceConfig.m3uUrl}
+                    className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-semibold rounded-xl border border-amber-500/30 flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+                    title="Αποθήκευση URL τοπικά"
+                  >
+                    <Bookmark className="w-3.5 h-3.5" />
+                    <span>Αποθήκευση</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -572,6 +809,25 @@ export const Step1Sources: React.FC<Step1SourcesProps> = ({
                 <Server className="w-3.5 h-3.5" />
                 <span>Δημιουργία M3U & EPG Links</span>
               </button>
+              {onSaveCurrentAsProfile && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInlineProfileName(
+                      sourceConfig.xtreamServer
+                        ? `Xtream: ${sourceConfig.xtreamServer.replace(/^https?:\/\//, '').split(':')[0]}`
+                        : 'Xtream Account'
+                    );
+                    setShowInlineSave(true);
+                  }}
+                  disabled={!sourceConfig.xtreamServer || !sourceConfig.xtreamUser || !sourceConfig.xtreamPass}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-semibold rounded-xl border border-amber-500/30 flex items-center gap-1.5 transition disabled:opacity-50"
+                  title="Αποθήκευση στοιχείων Xtream τοπικά"
+                >
+                  <Bookmark className="w-3.5 h-3.5" />
+                  <span>Αποθήκευση Λογαριασμού</span>
+                </button>
+              )}
             </div>
           </div>
         )}

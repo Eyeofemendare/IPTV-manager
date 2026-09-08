@@ -261,6 +261,38 @@ jobs:
               Τα links αυτά είναι μόνιμα και υποστηρίζουν HTTP Range headers και CORS για άμεση φόρτωση σε Kodi, web players και Smart TVs.
             </p>
 
+            {/* Custom Playlist File Name Input */}
+            <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80 space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-white flex items-center gap-1.5">
+                  <FileCode className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Όνομα Αρχείου Playlist (για ευκολία / μετονομασία):</span>
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {syncSchedule.playlistName || 'greek_custom'}.m3u
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={syncSchedule.playlistName || ''}
+                  placeholder="π.χ. iptv_salon_greek, iptv_bedroom, living_room"
+                  onChange={(e) => {
+                    const clean = e.target.value.replace(/[^a-zA-Z0-9_-]/g, '_');
+                    onChangeSyncSchedule({
+                      ...syncSchedule,
+                      playlistName: clean || 'greek_custom',
+                    });
+                  }}
+                  className="flex-1 bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500"
+                />
+                <span className="text-xs text-slate-400 font-mono">.m3u</span>
+              </div>
+              <p className="text-[10px] text-slate-400 leading-tight">
+                Μπορείτε να δώσετε διαφορετικό όνομα για κάθε λογαριασμό (π.χ. <code className="text-emerald-400">account1_clean.m3u</code>, <code className="text-emerald-400">account2_sports.m3u</code>) ώστε να τα ξεχωρίζετε άμεσα.
+              </p>
+            </div>
+
             {/* M3U URL Field */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
@@ -369,10 +401,10 @@ jobs:
             </div>
 
             {/* GitHub Action Automation Script snippet */}
-            <div className="mt-3 bg-slate-950 p-3 rounded-xl border border-slate-800">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-mono text-emerald-400 flex items-center gap-1.5">
-                  <Github className="w-3.5 h-3.5" /> .github/workflows/iptv-sync.yml
+            <div className="mt-3 bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-mono text-emerald-400 flex items-center gap-1.5 font-semibold">
+                  <Github className="w-3.5 h-3.5" /> .github/workflows/iptv-sync.yml (Αυτοματισμός GitHub Actions)
                 </span>
                 <button
                   onClick={() => handleCopy(githubActionWorkflowYaml, 'github_action')}
@@ -382,9 +414,26 @@ jobs:
                   <span>{copiedType === 'github_action' ? 'Αντιγράφηκε' : 'Αντιγραφή Workflow'}</span>
                 </button>
               </div>
-              <p className="text-[11px] text-slate-400">
-                Τοποθετήστε αυτό το αρχείο στο GitHub repository σας για αυτόματη καθημερινή ανανέωση της λίστας και των EPG streams χωρίς υπολογιστή!
-              </p>
+              
+              <div className="text-[11px] text-slate-300 space-y-1 bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+                <p className="font-semibold text-amber-300">⚙️ Πώς λειτουργεί ο Αυτόματος Συγχρονισμός 3 διαφορετικών λογαριασμών:</p>
+                <ul className="list-disc list-inside space-y-1 text-slate-400">
+                  <li>Κάθε λογαριασμός σας μπορεί να εξάγει το δικό του αρχείο με ξεχωριστό όνομα (π.χ. <span className="text-emerald-400">account1.m3u</span>, <span className="text-emerald-400">account2.m3u</span>, <span className="text-emerald-400">account3.m3u</span>).</li>
+                  <li>Αν έχετε ανεβάσει το repository στο GitHub με το παραπάνω αρχείο <strong>GitHub Action</strong>, οι servers του GitHub τρέχουν αυτόματα στο παρασκήνιο (χωρίς να έχετε ανοιχτό τον υπολογιστή) και ανανεώνουν και τα 3 αρχεία ταυτόχρονα στο Pages url σας!</li>
+                </ul>
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <p className="text-[11px] text-slate-400">
+                  Χρειάζεστε βοήθεια για το πού βρίσκεται το Deploy στο GitHub Pages;
+                </p>
+                <button
+                  onClick={onOpenGithubGuide}
+                  className="text-[11px] text-emerald-400 hover:text-emerald-300 font-semibold underline flex items-center gap-1"
+                >
+                  <span>Άνοιγμα Οδηγού Pages</span>
+                </button>
+              </div>
             </div>
           </div>
 
