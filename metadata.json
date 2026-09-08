@@ -1,0 +1,6 @@
+{
+  "name": "iPTV Manager",
+  "description": "Ολοκληρωμένο εργαλείο διαχείρισης, φιλτραρίσματος, αντιστοίχισης EPG και συγχρονισμού λιστών IPTV (M3U / Xtream Codes) για Smart TVs & Android.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
