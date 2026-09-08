@@ -1,0 +1,26 @@
+name: IPTV Daily Sync & Auto-Update
+on:
+  schedule:
+    - cron: '0 4 * * *' # Καθημερινά στις 04:00 UTC
+  workflow_dispatch:
+
+jobs:
+  update-iptv:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download & Filter M3U & EPG
+        run: |
+          echo "Syncing cleaned playlist..."
+          # Εδώ μπορεί να τρέχει το python/node script του iPTV Manager
+          # και να αποθηκεύει το playlist.m3u και epg.xml στον φάκελο public/
+          date > last_updated.txt
+
+      - name: Commit & Push to GitHub Pages
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Automated IPTV Playlist & EPG Update [skip ci]"
