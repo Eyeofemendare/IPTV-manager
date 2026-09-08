@@ -24,6 +24,9 @@ import {
   HardDrive,
   FolderLock,
   Plus,
+  Download,
+  ExternalLink,
+  HelpCircle,
 } from 'lucide-react';
 import { SourceConfig, PingResult, EpgChannel, SavedAccountProfile } from '../types';
 import { testConnectionPing, buildXtreamM3uUrl, buildXtreamEpgUrl } from '../utils/xtreamHelper';
@@ -70,6 +73,8 @@ export const Step1Sources: React.FC<Step1SourcesProps> = ({
     testedUrl: '',
   });
   const [isLoadingUrl, setIsLoadingUrl] = useState(false);
+  const [urlFetchProgress, setUrlFetchProgress] = useState<string>('');
+  const [urlFetchSuccess, setUrlFetchSuccess] = useState<string | null>(null);
   const [urlFetchError, setUrlFetchError] = useState<string | null>(null);
 
   // Inline profile save states
@@ -161,32 +166,98 @@ export const Step1Sources: React.FC<Step1SourcesProps> = ({
     reader.readAsText(file);
   };
 
+  // Smart Fetch helper with multiple CORS proxies fallback
+  const fetchWithCorsFallback = async (
+    targetUrl: string,
+    onProgress?: (msg: string) => void
+  ): Promise<{ text: string; viaProxy: boolean }> => {
+    // Attempt 1: Direct fetch
+    try {
+      if (onProgress) onProgress('Απευθείας ανάκτηση από διακομιστή...');
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(targetUrl, { signal: controller.signal });
+      clearTimeout(timer);
+      if (res.ok) {
+        const text = await res.text();
+        if (text && text.trim().length > 0) {
+          return { text, viaProxy: false };
+        }
+      }
+    } catch (directErr) {
+      console.warn('Direct fetch blocked by CORS or network, attempting CORS proxy 1...', directErr);
+    }
+
+    // Attempt 2: AllOrigins proxy
+    try {
+      if (onProgress) onProgress('Δοκιμή μέσω ασφαλούς CORS Proxy (AllOrigins)...');
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10000);
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+      const res = await fetch(proxyUrl, { signal: controller.signal });
+      clearTimeout(timer);
+      if (res.ok) {
+        const text = await res.text();
+        if (text && text.trim().length > 0) {
+          return { text, viaProxy: true };
+        }
+      }
+    } catch (proxy1Err) {
+      console.warn('AllOrigins proxy failed, attempting CORS proxy 2...', proxy1Err);
+    }
+
+    // Attempt 3: CorsProxy.io
+    try {
+      if (onProgress) onProgress('Δοκιμή μέσω εναλλακτικού CORS Proxy (CorsProxy.io)...');
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10000);
+      const proxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`;
+      const res = await fetch(proxyUrl, { signal: controller.signal });
+      clearTimeout(timer);
+      if (res.ok) {
+        const text = await res.text();
+        if (text && text.trim().length > 0) {
+          return { text, viaProxy: true };
+        }
+      }
+    } catch (proxy2Err) {
+      console.warn('CorsProxy.io failed:', proxy2Err);
+    }
+
+    throw new Error('CORS_RESTRICTED');
+  };
+
   // Handle M3U URL Fetch
   const handleFetchM3uUrl = async () => {
     if (!sourceConfig.m3uUrl) return;
     setIsLoadingUrl(true);
     setUrlFetchError(null);
+    setUrlFetchSuccess(null);
+    setUrlFetchProgress('Έναρξη σύνδεσης...');
 
     try {
       handleTestPing(sourceConfig.m3uUrl);
-      const response = await fetch(sourceConfig.m3uUrl);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      const text = await response.text();
+      const { text, viaProxy } = await fetchWithCorsFallback(sourceConfig.m3uUrl, (msg) => {
+        setUrlFetchProgress(msg);
+      });
+
       onLoadM3uContent(text, sourceConfig.m3uUrl);
       onChangeSourceConfig({
         ...sourceConfig,
         type: 'm3u_url',
         loadedAt: new Date().toLocaleTimeString('el-GR'),
       });
+      setUrlFetchSuccess(
+        viaProxy
+          ? 'Επιτυχής ανάκτηση καναλιών μέσω CORS Proxy!'
+          : 'Επιτυχής απευθείας ανάκτηση καναλιών!'
+      );
     } catch (err: any) {
       console.warn('URL direct fetch restricted by CORS or network', err);
-      setUrlFetchError(
-        'Η απευθείας ανάκτηση από τον browser περιορίζεται από πολιτική CORS του παρόχου. Μπορείτε να κάνετε λήψη του .m3u αρχείου και να το σύρετε στην καρτέλα "Τοπικό Αρχείο", ή να δοκιμάσετε το Demo Προφίλ.'
-      );
+      setUrlFetchError('CORS_RESTRICTED');
     } finally {
       setIsLoadingUrl(false);
+      setUrlFetchProgress('');
     }
   };
 
@@ -198,12 +269,7 @@ export const Step1Sources: React.FC<Step1SourcesProps> = ({
 
     try {
       handleTestPing(customXmltvUrl);
-
-      const response = await fetch(customXmltvUrl);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      const xmlString = await response.text();
+      const { text: xmlString, viaProxy } = await fetchWithCorsFallback(customXmltvUrl);
       const parsed = parseXMLTV(xmlString);
 
       if (parsed.length > 0) {
@@ -217,10 +283,9 @@ export const Step1Sources: React.FC<Step1SourcesProps> = ({
         });
         setXmltvFetchStatus({
           type: 'success',
-          message: `Επιτυχής ανάκτηση & ανάλυση ${parsed.length} καναλιών EPG από το XMLTV URL!`,
+          message: `Επιτυχής ανάκτηση & ανάλυση ${parsed.length} καναλιών EPG από το XMLTV URL${viaProxy ? ' (μέσω CORS Proxy)' : ''}!`,
         });
       } else {
-        // Fallback: Still set URL for cloud export and provide diagnostic
         onChangeSourceConfig({
           ...sourceConfig,
           epgUrl: customXmltvUrl,
@@ -235,7 +300,6 @@ export const Step1Sources: React.FC<Step1SourcesProps> = ({
       }
     } catch (err: any) {
       console.warn('CORS or network restriction on XMLTV fetch', err);
-      // Even if CORS limits direct in-browser download of the XMLTV file, we save the URL for export M3U
       onChangeSourceConfig({
         ...sourceConfig,
         epgUrl: customXmltvUrl,
@@ -246,7 +310,7 @@ export const Step1Sources: React.FC<Step1SourcesProps> = ({
       setXmltvFetchStatus({
         type: 'error',
         message:
-          'Η απευθείας ανάκτηση XMLTV περιορίστηκε από CORS του παρόχου. Το URL ορίστηκε επιτυχώς για τη λίστα M3U. Για άμεση αντιστοίχιση στον browser, μπορείτε να κάνετε λήψη του .xml/.xmltv αρχείου και να το ανεβάσετε στο "Τοπικό Αρχείο XMLTV", ή να χρησιμοποιήσετε τα προφορτωμένα Ελληνικά & Διεθνή presets.',
+          'Η απευθείας ανάκτηση XMLTV περιορίστηκε από CORS του διακομιστή. Το URL αποθηκεύτηκε κανονικά για την εξαγωγή M3U. Για άμεση αντιστοίχιση στον browser, μπορείτε να κατεβάσετε το .xml αρχείο και να το σύρετε στο "Τοπικό Αρχείο XMLTV", ή να χρησιμοποιήσετε τα προφορτωμένα presets.',
       });
     } finally {
       setIsLoadingXmltv(false);
@@ -687,10 +751,87 @@ export const Step1Sources: React.FC<Step1SourcesProps> = ({
               </div>
             </div>
 
+            {/* Loading progress */}
+            {isLoadingUrl && (
+              <div className="bg-cyan-500/10 border border-cyan-500/30 p-3 rounded-xl text-xs text-cyan-200 flex items-center gap-2.5 animate-pulse">
+                <RefreshCw className="w-4 h-4 animate-spin text-cyan-400 shrink-0" />
+                <span>{urlFetchProgress || 'Ανάκτηση λίστας σε εξέλιξη...'}</span>
+              </div>
+            )}
+
+            {/* Success feedback */}
+            {urlFetchSuccess && (
+              <div className="bg-emerald-500/15 border border-emerald-500/40 p-3.5 rounded-xl text-xs text-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="font-medium">{urlFetchSuccess}</span>
+                </div>
+                <button
+                  onClick={onProceedToStep2}
+                  className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-xs transition shrink-0 self-end sm:self-auto"
+                >
+                  Συνέχεια στο Βήμα 2 ➔
+                </button>
+              </div>
+            )}
+
+            {/* CORS Restriction Assistance Card */}
             {urlFetchError && (
-              <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl text-xs text-amber-200 flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
-                <div>{urlFetchError}</div>
+              <div className="bg-slate-950 border border-amber-500/40 p-4 sm:p-5 rounded-xl space-y-3 shadow-lg">
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="text-sm font-bold text-amber-300">
+                      Περιορισμός Ασφαλείας Browser (CORS Policy Παρόχου)
+                    </h4>
+                    <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                      Ο διακομιστής IPTV του παρόχου σας δεν περιλαμβάνει κεφαλίδες CORS (<code className="text-emerald-400">Access-Control-Allow-Origin</code>), με αποτέλεσμα ο browser να μπλοκάρει την απευθείας ανάγνωση του περιεχομένου.
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      💡 <em>Σημείωση: Οι εφαρμογές τηλεόρασης (TiviMate, IPTV Smarters, Kodi) δεν έχουν αυτόν τον περιορισμό browser και θα παίζουν κανονικά.</em>
+                    </p>
+                  </div>
+                </div>
+
+                {/* 2 Easy Solutions */}
+                <div className="bg-slate-900/90 border border-slate-800 p-3 rounded-lg space-y-2.5">
+                  <span className="text-xs font-semibold text-white block">
+                    Επιλέξτε έναν από τους 2 άμεσους τρόπους για να συνεχίσετε:
+                  </span>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {/* Solution 1: Direct Download */}
+                    <a
+                      href={sourceConfig.m3uUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-3 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 hover:border-emerald-500/60 rounded-xl flex items-center gap-2.5 text-xs text-emerald-200 transition group"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                        <Download className="w-4 h-4 group-hover:translate-y-0.5 transition-transform" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-white">1. Λήψη Αρχείου M3U</div>
+                        <div className="text-[10px] text-slate-400">Ανοίγει άμεσα για λήψη στον υπολογιστή</div>
+                      </div>
+                    </a>
+
+                    {/* Solution 2: Switch to Local File */}
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('m3u_file')}
+                      className="p-3 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 hover:border-cyan-500/60 rounded-xl flex items-center gap-2.5 text-xs text-cyan-200 text-left transition group"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center text-cyan-400 shrink-0">
+                        <Upload className="w-4 h-4 group-hover:-translate-y-0.5 transition-transform" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-white">2. Καρτέλα "Τοπικό Αρχείο"</div>
+                        <div className="text-[10px] text-slate-400">Σύρετε το αρχείο .m3u για άμεση επεξεργασία</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
