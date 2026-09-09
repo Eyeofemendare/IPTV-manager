@@ -27,6 +27,7 @@ import {
   buildEffectiveEpgUrl,
   addOrTogglePresetSource,
   addUrlEpgSource,
+  addMultipleUrlEpgSources,
   addFileEpgSource,
   toggleEpgSource,
   removeEpgSource,
@@ -138,6 +139,16 @@ export default function App() {
       ? sourceConfig.epgSources
       : createDefaultEpgSources();
     const updated = addUrlEpgSource(current, url, name, parsedChannels);
+    updateSourcesAndEpg(updated);
+  };
+
+  const handleAddMultipleUrlSources = (
+    items: Array<{ url: string; name?: string; channels: EpgChannel[] }>
+  ) => {
+    const current = sourceConfig.epgSources && sourceConfig.epgSources.length > 0
+      ? sourceConfig.epgSources
+      : createDefaultEpgSources();
+    const updated = addMultipleUrlEpgSources(current, items);
     updateSourcesAndEpg(updated);
   };
 
@@ -377,6 +388,7 @@ export default function App() {
             onRemoveEpgSource={handleRemoveEpgSource}
             onAddOrTogglePreset={handleAddOrTogglePreset}
             onAddUrlSource={handleAddUrlSource}
+            onAddMultipleUrlSources={handleAddMultipleUrlSources}
             onAddFileSource={handleAddFileSource}
           />
         )}

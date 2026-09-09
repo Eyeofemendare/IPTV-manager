@@ -48,14 +48,15 @@ export const Step4CloudSync: React.FC<Step4CloudSyncProps> = ({
   const [m3uQrUrl, setM3uQrUrl] = useState<string>('');
   const [epgQrUrl, setEpgQrUrl] = useState<string>('');
   const [showShareNotification, setShowShareNotification] = useState(false);
+  const [copiedUrlId, setCopiedUrlId] = useState<string | null>(null);
   const [useCustomEpgInM3u, setUseCustomEpgInM3u] = useState(
-    Boolean(sourceConfig?.customEpgUrl || (sourceConfig?.epgUrl && sourceConfig?.epgSourceType !== 'preset'))
+    Boolean(sourceConfig?.epgUrl || sourceConfig?.customEpgUrl)
   );
 
   // Cloud URLs
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://iptv-manager.github.io';
   const simulatedM3uCloudUrl = `${baseUrl}/cloud-playlist/${syncSchedule.playlistName || 'greek_custom'}.m3u`;
-  const customOrPresetEpgUrl = sourceConfig?.customEpgUrl || sourceConfig?.epgUrl || '';
+  const customOrPresetEpgUrl = sourceConfig?.epgUrl || sourceConfig?.customEpgUrl || '';
   const simulatedEpgCloudUrl = (useCustomEpgInM3u && customOrPresetEpgUrl)
     ? customOrPresetEpgUrl
     : `${baseUrl}/cloud-epg/epg_guide.xml`;
@@ -323,49 +324,78 @@ jobs:
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-semibold text-slate-300">2. Διεύθυνση Οδηγού EPG (XMLTV URL)</span>
-                <span className="text-cyan-400 text-[11px]">Ανανέωση προγράμματος</span>
+                <span className="text-cyan-400 text-[11px]">
+                  {sourceConfig?.epgSources && sourceConfig.epgSources.filter((s) => s.enabled && s.url).length > 1
+                    ? `${sourceConfig.epgSources.filter((s) => s.enabled && s.url).length} URLs ενεργά`
+                    : 'Ανανέωση προγράμματος'}
+                </span>
               </div>
               <div className="flex gap-2">
                 <input
                   type="text"
                   readOnly
                   value={simulatedEpgCloudUrl}
-                  className="flex-1 bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none"
+                  className="flex-1 bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none select-all"
                 />
                 <button
                   id="btn-copy-epg-url"
                   onClick={() => handleCopy(simulatedEpgCloudUrl, 'epg')}
                   className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 flex items-center gap-1.5 transition shrink-0"
+                  title="Αντιγραφή URL"
                 >
                   {copiedType === 'epg' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                   <span>{copiedType === 'epg' ? 'OK!' : 'Copy'}</span>
                 </button>
               </div>
 
-              {/* Multi-EPG Sources badge when 2+ sources are active */}
+              {/* Multi-EPG Sources breakdown when 2+ sources are active */}
               {sourceConfig?.epgSources && sourceConfig.epgSources.filter((s) => s.enabled).length >= 2 && (
-                <div className="p-3 bg-cyan-950/40 border border-cyan-800/50 rounded-xl space-y-1.5 mt-2">
+                <div className="p-3 bg-cyan-950/40 border border-cyan-800/50 rounded-xl space-y-2 mt-2">
                   <div className="flex items-center justify-between text-xs font-bold text-cyan-300">
                     <span className="flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
                       Πολυ-πηγικό EPG ({sourceConfig.epgSources.filter((s) => s.enabled).length} ενεργές πηγές)
                     </span>
                     <span className="text-[10px] text-emerald-400 font-normal">
-                      Ενοποιημένα στο M3U Header
+                      Ενοποιημένα στο M3U Header (<code className="font-mono">url-tvg</code>)
                     </span>
                   </div>
-                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+
+                  <div className="space-y-1.5 pt-1">
                     {sourceConfig.epgSources
-                      .filter((s) => s.enabled)
+                      .filter((s) => s.enabled && s.url)
                       .map((s) => (
-                        <span
+                        <div
                           key={s.id}
-                          className="text-[10px] px-2 py-0.5 rounded bg-slate-900/90 border border-slate-700 text-slate-200 font-medium"
+                          className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs"
                         >
-                          ✓ {s.name} ({s.channelCount ?? s.channels?.length ?? 0} ch)
-                        </span>
+                          <div className="min-w-0 flex-1 flex items-center gap-1.5">
+                            <span className="font-semibold text-white truncate shrink-0">{s.name}:</span>
+                            <span className="text-[11px] text-slate-400 font-mono truncate">{s.url}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(s.url!);
+                              setCopiedUrlId(s.id);
+                              setTimeout(() => setCopiedUrlId(null), 2000);
+                            }}
+                            className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 flex items-center gap-1 text-[10px] font-mono shrink-0 transition"
+                          >
+                            {copiedUrlId === s.id ? (
+                              <Check className="w-3 h-3 text-emerald-400" />
+                            ) : (
+                              <Copy className="w-3 h-3 text-cyan-400" />
+                            )}
+                            <span>{copiedUrlId === s.id ? 'OK' : 'Copy'}</span>
+                          </button>
+                        </div>
                       ))}
                   </div>
+
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    💡 <strong>Συμβατότητα IPTV:</strong> Οι εφαρμογές TiviMate, OTT Navigator, IPTV Smarters και Kodi διαβάζουν απευθείας πολλαπλά EPG URLs από την κεφαλίδα του M3U αρχείου.
+                  </p>
                 </div>
               )}
             </div>

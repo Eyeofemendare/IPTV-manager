@@ -28,11 +28,15 @@ import {
   ExternalLink,
   HelpCircle,
   Trash2,
+  Copy,
+  Link,
+  ListPlus,
 } from 'lucide-react';
 import { SourceConfig, PingResult, EpgChannel, SavedAccountProfile, EpgSourceItem } from '../types';
 import { testConnectionPing, buildXtreamM3uUrl, buildXtreamEpgUrl } from '../utils/xtreamHelper';
 import { EPG_PRESETS } from '../data/epgPresets';
 import { parseXMLTV } from '../utils/xmltvParser';
+import { extractUrlsFromString } from '../utils/epgSourcesHelper';
 
 interface Step1SourcesProps {
   sourceConfig: SourceConfig;
@@ -53,6 +57,7 @@ interface Step1SourcesProps {
   epgSources?: EpgSourceItem[];
   onAddOrTogglePreset?: (presetId: string) => void;
   onAddUrlSource?: (url: string, name: string, channels: EpgChannel[]) => void;
+  onAddMultipleUrlSources?: (items: Array<{ url: string; name?: string; channels: EpgChannel[] }>) => void;
   onAddFileSource?: (fileName: string, channels: EpgChannel[]) => void;
   onToggleEpgSource?: (sourceId: string) => void;
   onRemoveEpgSource?: (sourceId: string) => void;
@@ -76,6 +81,7 @@ export const Step1Sources: React.FC<Step1SourcesProps> = ({
   epgSources = [],
   onAddOrTogglePreset,
   onAddUrlSource,
+  onAddMultipleUrlSources,
   onAddFileSource,
   onToggleEpgSource,
   onRemoveEpgSource,
@@ -105,11 +111,66 @@ export const Step1Sources: React.FC<Step1SourcesProps> = ({
   const [customXmltvUrl, setCustomXmltvUrl] = useState<string>(
     sourceConfig.customEpgUrl || (sourceConfig.epgSourceType === 'custom_url' ? sourceConfig.epgUrl : '')
   );
+  const [urlInputMode, setUrlInputMode] = useState<'single' | 'bulk'>('single');
+  const [bulkUrlsText, setBulkUrlsText] = useState<string>('');
   const [isLoadingXmltv, setIsLoadingXmltv] = useState(false);
+  const [copiedSourceId, setCopiedSourceId] = useState<string | null>(null);
+  const [multiEpgCopied, setMultiEpgCopied] = useState<boolean>(false);
   const [xmltvFetchStatus, setXmltvFetchStatus] = useState<{
     type: 'success' | 'error' | 'idle';
     message: string;
   }>({ type: 'idle', message: '' });
+
+  // Curated Popular XMLTV EPG URLs
+  const POPULAR_EPG_URLS = [
+    {
+      name: 'iptv-org Ελλάδα',
+      badge: 'GR',
+      url: 'https://iptv-org.github.io/epg/guides/gr.xml',
+      description: 'Ελληνικός οδηγός καναλιών (iptv-org)',
+    },
+    {
+      name: 'iptv-org Κύπρος',
+      badge: 'CY',
+      url: 'https://iptv-org.github.io/epg/guides/cy.xml',
+      description: 'Κυπριακός οδηγός (iptv-org)',
+    },
+    {
+      name: 'EPGShare GR',
+      badge: 'GR1',
+      url: 'https://epgshare01.online/epgshare01/epg_ripper_GR1.xml.gz',
+      description: 'Ελληνικά κανάλια & συνδρομητικά',
+    },
+    {
+      name: 'Sports EPG Cloud',
+      badge: 'SPORT',
+      url: 'https://iptv-manager.cloud/epg/sports.xml',
+      description: 'Ευρωπαϊκός αθλητικός οδηγός',
+    },
+    {
+      name: 'iptv-org UK Guide',
+      badge: 'UK',
+      url: 'https://iptv-org.github.io/epg/guides/uk.xml',
+      description: 'Βρετανικά και διεθνή κανάλια',
+    },
+  ];
+
+  const handleCopySourceUrl = (url: string, id: string) => {
+    navigator.clipboard.writeText(url);
+    setCopiedSourceId(id);
+    setTimeout(() => setCopiedSourceId(null), 2000);
+  };
+
+  const handleCopyAllEpgUrls = () => {
+    const urls = (epgSources || [])
+      .filter((s) => s.enabled && s.url)
+      .map((s) => s.url!.trim());
+    if (urls.length > 0) {
+      navigator.clipboard.writeText(urls.join(','));
+      setMultiEpgCopied(true);
+      setTimeout(() => setMultiEpgCopied(false), 2000);
+    }
+  };
 
   // Run ping test
   const handleTestPing = async (urlToTest: string) => {
@@ -274,56 +335,104 @@ export const Step1Sources: React.FC<Step1SourcesProps> = ({
     }
   };
 
-  // Handle Fetch Custom XMLTV EPG URL
-  const handleFetchCustomXmltvUrl = async () => {
-    if (!customXmltvUrl) return;
-    setIsLoadingXmltv(true);
-    setXmltvFetchStatus({ type: 'idle', message: '' });
+  // Handle Fetch Custom XMLTV EPG URL(s)
+  const handleFetchCustomXmltvUrl = async (urlsOverride?: string) => {
+    const rawInput =
+      urlsOverride !== undefined
+        ? urlsOverride
+        : urlInputMode === 'bulk'
+        ? bulkUrlsText
+        : customXmltvUrl;
 
-    try {
-      handleTestPing(customXmltvUrl);
-      const { text: xmlString, viaProxy } = await fetchWithCorsFallback(customXmltvUrl);
-      const parsed = parseXMLTV(xmlString);
+    if (!rawInput || !rawInput.trim()) return;
 
-      if (parsed.length > 0) {
-        if (onAddUrlSource) {
-          onAddUrlSource(customXmltvUrl, `XMLTV: ${customXmltvUrl}`, parsed);
-        } else {
-          onLoadCustomXmltv(xmlString, customXmltvUrl, customXmltvUrl);
-        }
-        setXmltvFetchStatus({
-          type: 'success',
-          message: `Επιτυχής προσθήκη XMLTV URL με ${parsed.length} κανάλια EPG στις πηγές${viaProxy ? ' (μέσω CORS Proxy)' : ''}!`,
-        });
-        setCustomXmltvUrl('');
+    let urls = extractUrlsFromString(rawInput);
+    if (urls.length === 0) {
+      const trimmed = rawInput.trim();
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        urls = [trimmed];
       } else {
-        if (onAddUrlSource) {
-          onAddUrlSource(customXmltvUrl, `XMLTV: ${customXmltvUrl}`, []);
-        } else {
-          onLoadCustomXmltv('', customXmltvUrl, customXmltvUrl);
-        }
         setXmltvFetchStatus({
-          type: 'success',
-          message: `Το XMLTV URL προστέθηκε στις πηγές EPG για την τελική εξαγωγή M3U (${customXmltvUrl}).`,
+          type: 'error',
+          message: 'Παρακαλώ εισάγετε έγκυρο σύνδεσμο HTTP/HTTPS XMLTV (π.χ. https://.../epg.xml).',
         });
-        setCustomXmltvUrl('');
+        return;
       }
-    } catch (err: any) {
-      console.warn('CORS or network restriction on XMLTV fetch', err);
-      if (onAddUrlSource) {
-        onAddUrlSource(customXmltvUrl, `XMLTV: ${customXmltvUrl}`, []);
-      } else {
-        onLoadCustomXmltv('', customXmltvUrl, customXmltvUrl);
-      }
-      setXmltvFetchStatus({
-        type: 'error',
-        message:
-          'Η απευθείας ανάγνωση XMLTV περιορίστηκε από CORS, αλλά το URL προστέθηκε στις πηγές για την παραγωγή του συνδέσμου url-tvg στην εξαγωγή M3U.',
-      });
-      setCustomXmltvUrl('');
-    } finally {
-      setIsLoadingXmltv(false);
     }
+
+    setIsLoadingXmltv(true);
+    setXmltvFetchStatus({ type: 'idle', message: `Έναρξη επεξεργασίας ${urls.length} EPG URLs...` });
+
+    const addedItems: Array<{ url: string; name?: string; channels: EpgChannel[] }> = [];
+    let totalChannelsParsed = 0;
+
+    for (let i = 0; i < urls.length; i++) {
+      const targetUrl = urls[i];
+      let domain = 'Web XMLTV';
+      try {
+        domain = new URL(targetUrl).hostname || 'Web XMLTV';
+      } catch {}
+
+      setXmltvFetchStatus({
+        type: 'idle',
+        message: `Ανάλυση URL ${i + 1} από ${urls.length}: ${domain}...`,
+      });
+
+      try {
+        handleTestPing(targetUrl);
+        const { text: xmlString } = await fetchWithCorsFallback(targetUrl);
+        const parsed = parseXMLTV(xmlString);
+
+        if (parsed.length > 0) {
+          totalChannelsParsed += parsed.length;
+          addedItems.push({
+            url: targetUrl,
+            name: `XMLTV (${domain})`,
+            channels: parsed,
+          });
+        } else {
+          addedItems.push({
+            url: targetUrl,
+            name: `XMLTV (${domain})`,
+            channels: [],
+          });
+        }
+      } catch (err: any) {
+        console.warn(`CORS/Network restriction for ${targetUrl}`, err);
+        // Include anyway for final M3U url-tvg export!
+        addedItems.push({
+          url: targetUrl,
+          name: `XMLTV (${domain})`,
+          channels: [],
+        });
+      }
+    }
+
+    if (addedItems.length > 0) {
+      if (onAddMultipleUrlSources) {
+        onAddMultipleUrlSources(addedItems);
+      } else if (onAddUrlSource) {
+        for (const item of addedItems) {
+          onAddUrlSource(item.url, item.name || '', item.channels);
+        }
+      } else {
+        // Fallback for single legacy
+        onLoadCustomXmltv('', addedItems[0].url, addedItems[0].url);
+      }
+
+      setXmltvFetchStatus({
+        type: 'success',
+        message:
+          addedItems.length === 1
+            ? `Επιτυχής προσθήκη XMLTV URL! (${totalChannelsParsed} κανάλια EPG αναλύθηκαν και είναι διαθέσιμα για αντιστοίχιση)`
+            : `Επιτυχής προσθήκη ${addedItems.length} EPG URLs! (${totalChannelsParsed} νέα κανάλια EPG ενοποιήθηκαν στην ομάδα)`,
+      });
+
+      setCustomXmltvUrl('');
+      setBulkUrlsText('');
+    }
+
+    setIsLoadingXmltv(false);
   };
 
   // Handle Xtream Codes Convert
@@ -1013,23 +1122,37 @@ export const Step1Sources: React.FC<Step1SourcesProps> = ({
         {/* ACTIVE EPG SOURCES LIST (Multi-EPG Manager) */}
         {epgSources.length > 0 && (
           <div className="bg-slate-950/90 border border-cyan-500/20 rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Layers className="w-4 h-4 text-cyan-400" />
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                  Ενεργή Ομάδα Πηγών EPG ({epgSources.filter((s) => s.enabled).length} επιλεγμένες)
+                  Ενεργή Ομάδα Πηγών EPG ({epgSources.filter((s) => s.enabled).length} επιλεγμένες / {epgSources.length} συνολικά)
                 </h4>
               </div>
-              {epgSources.filter((s) => s.enabled).length >= 2 && (
-                <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1.5 animate-pulse">
-                  <Sparkles className="w-3 h-3" /> Πολυ-πηγικό EPG (2+ πηγές)
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {epgSources.filter((s) => s.enabled && s.url).length >= 2 && (
+                  <button
+                    type="button"
+                    onClick={handleCopyAllEpgUrls}
+                    className="text-xs px-2.5 py-1 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 rounded-lg flex items-center gap-1.5 transition"
+                    title="Αντιγραφή όλων των ενεργών EPG URLs διαχωρισμένων με κόμμα (για TiviMate / OTT Navigator / IPTV Smarters)"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>{multiEpgCopied ? 'Αντιγράφηκαν Όλα!' : 'Αντιγραφή Συνδυασμένων URLs'}</span>
+                  </button>
+                )}
+                {epgSources.filter((s) => s.enabled).length >= 2 && (
+                  <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1.5 animate-pulse">
+                    <Sparkles className="w-3 h-3" /> Multi-URL EPG ({epgSources.filter((s) => s.enabled).length} πηγές)
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="space-y-2">
               {epgSources.map((source) => {
                 const count = source.channelCount ?? source.channels?.length ?? 0;
+                const isCopied = copiedSourceId === source.id;
                 return (
                   <div
                     key={source.id}
@@ -1080,7 +1203,7 @@ export const Step1Sources: React.FC<Step1SourcesProps> = ({
 
                         <div className="text-[11px] text-slate-400 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono">
                           {source.url && (
-                            <span className="truncate max-w-md text-slate-400">{source.url}</span>
+                            <span className="truncate max-w-md text-slate-400 select-all">{source.url}</span>
                           )}
                           {source.fileName && (
                             <span className="text-slate-300">Αρχείο: {source.fileName}</span>
@@ -1094,6 +1217,27 @@ export const Step1Sources: React.FC<Step1SourcesProps> = ({
 
                     {/* Actions */}
                     <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                      {source.url && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleCopySourceUrl(source.url!, source.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-cyan-500/10 transition border border-transparent hover:border-cyan-500/20"
+                            title="Αντιγραφή URL"
+                          >
+                            {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleTestPing(source.url!)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-cyan-500/10 transition border border-transparent hover:border-cyan-500/20"
+                            title="Δοκιμή Ping"
+                          >
+                            <Activity className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+
                       <button
                         type="button"
                         onClick={() => onToggleEpgSource && onToggleEpgSource(source.id)}
@@ -1123,9 +1267,22 @@ export const Step1Sources: React.FC<Step1SourcesProps> = ({
             </div>
 
             {epgSources.filter((s) => s.enabled).length >= 2 && (
-              <p className="text-xs text-cyan-300/80 bg-cyan-950/40 p-2.5 rounded-lg border border-cyan-800/40">
-                💡 <strong>Συνδυασμός 2+ αρχείων:</strong> Όλα τα ενεργά προγράμματα συγχωνεύονται αυτόματα για την έξυπνη αντιστοίχιση καναλιών. Στην τελική εξαγωγή, το αρχείο M3U θα περιλαμβάνει όλα τα ενεργά EPG URLs διαχωρισμένα με κόμμα.
-              </p>
+              <div className="text-xs text-cyan-300/90 bg-cyan-950/40 p-3 rounded-lg border border-cyan-800/40 space-y-1.5">
+                <div className="flex items-center gap-1.5 font-bold text-cyan-200">
+                  <Sparkles className="w-4 h-4 text-cyan-400" />
+                  <span>Συνδυασμός Πολλαπλών Πηγών EPG (Multi-URL):</span>
+                </div>
+                <p className="text-slate-300 leading-relaxed">
+                  Όλα τα ενεργά προγράμματα συγχωνεύονται αυτόματα στη βάση αντιστοίχισης. Στην τελική εξαγωγή M3U, η κεφαλίδα περιλαμβάνει όλα τα ενεργά EPG URLs χωρισμένα με κόμμα (<code className="bg-slate-900 px-1 py-0.5 rounded text-cyan-300 font-mono text-[11px]">url-tvg="url1,url2"</code>).
+                </p>
+                {epgSources.filter((s) => s.enabled && s.url).length > 0 && (
+                  <div className="bg-slate-900/90 border border-slate-800 rounded p-2 text-[11px] font-mono text-slate-300 truncate">
+                    <span className="text-cyan-400">url-tvg="</span>
+                    {epgSources.filter((s) => s.enabled && s.url).map((s) => s.url).join(',')}
+                    <span className="text-cyan-400">"</span>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -1204,47 +1361,158 @@ export const Step1Sources: React.FC<Step1SourcesProps> = ({
 
         {/* Custom XMLTV URL & File Upload Accordion / Input Area */}
         <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-              <Zap className="w-3.5 h-3.5 text-amber-400" />
-              <span>Προσθήκη Νέου XMLTV URL ή Αρχείου EPG στην Ομάδα</span>
-            </span>
-            <span className="text-xs text-slate-400">
-              Μπορείτε να προσθέσετε όσα αρχεία/URLs επιθυμείτε
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4 text-amber-400" />
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                Προσθήκη XMLTV EPG URLs (Μεμονωμένα ή Μαζικά)
+              </span>
+            </div>
+            {/* Input Mode Toggle */}
+            <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setUrlInputMode('single')}
+                className={`px-2.5 py-1 rounded-md font-medium transition flex items-center gap-1.5 ${
+                  urlInputMode === 'single'
+                    ? 'bg-cyan-600 text-white shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Link className="w-3.5 h-3.5" />
+                <span>Μεμονωμένο URL</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setUrlInputMode('bulk')}
+                className={`px-2.5 py-1 rounded-md font-medium transition flex items-center gap-1.5 ${
+                  urlInputMode === 'bulk'
+                    ? 'bg-cyan-600 text-white shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <ListPlus className="w-3.5 h-3.5" />
+                <span>Μαζική Εισαγωγή URLs</span>
+              </button>
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-slate-300 block">
-              Διεύθυνση Custom XMLTV EPG URL (.xml / .xmltv / get_epg.php)
-            </label>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <input
-                id="input-custom-epg-url"
-                type="url"
-                placeholder="π.χ. https://iptv-org.github.io/epg/guides/gr.xml ή http://provider:8080/xmltv.php"
-                value={customXmltvUrl}
-                onChange={(e) => setCustomXmltvUrl(e.target.value)}
-                className="flex-1 bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-2 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono"
+          {urlInputMode === 'single' ? (
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-300 block">
+                Διεύθυνση Custom XMLTV EPG URL (.xml / .xmltv / get_epg.php)
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  id="input-custom-epg-url"
+                  type="url"
+                  placeholder="π.χ. https://iptv-org.github.io/epg/guides/gr.xml (ή πολλαπλά χωρισμένα με κόμμα)"
+                  value={customXmltvUrl}
+                  onChange={(e) => setCustomXmltvUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleFetchCustomXmltvUrl();
+                    }
+                  }}
+                  className="flex-1 bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-2 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono"
+                />
+                <button
+                  id="btn-test-ping-epg"
+                  onClick={() => handleTestPing(customXmltvUrl)}
+                  disabled={!customXmltvUrl}
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+                >
+                  <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Test Ping</span>
+                </button>
+                <button
+                  id="btn-fetch-custom-epg"
+                  onClick={() => handleFetchCustomXmltvUrl()}
+                  disabled={!customXmltvUrl || isLoadingXmltv}
+                  className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition disabled:opacity-50 shadow-md shadow-cyan-600/20"
+                >
+                  {isLoadingXmltv ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                  <span>+ Προσθήκη URL στην Ομάδα</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-300 block">
+                  Επικόλληση Πολλαπλών XMLTV URLs (ένα ανά γραμμή ή χωρισμένα με κόμμα)
+                </label>
+                {bulkUrlsText.trim() && (
+                  <span className="text-[11px] text-cyan-400 font-mono">
+                    {extractUrlsFromString(bulkUrlsText).length} URLs εντοπίστηκαν
+                  </span>
+                )}
+              </div>
+              <textarea
+                id="textarea-bulk-epg-urls"
+                rows={4}
+                placeholder={`https://iptv-org.github.io/epg/guides/gr.xml\nhttps://epgshare01.online/epgshare01/epg_ripper_GR1.xml.gz\nhttp://provider.org:8080/xmltv.php?username=...&password=...`}
+                value={bulkUrlsText}
+                onChange={(e) => setBulkUrlsText(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono leading-relaxed resize-y"
               />
-              <button
-                id="btn-test-ping-epg"
-                onClick={() => handleTestPing(customXmltvUrl)}
-                disabled={!customXmltvUrl}
-                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 flex items-center justify-center gap-1.5 transition disabled:opacity-50"
-              >
-                <Activity className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Test Ping</span>
-              </button>
-              <button
-                id="btn-fetch-custom-epg"
-                onClick={handleFetchCustomXmltvUrl}
-                disabled={!customXmltvUrl || isLoadingXmltv}
-                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition disabled:opacity-50 shadow-md shadow-cyan-600/20"
-              >
-                {isLoadingXmltv ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                <span>+ Προσθήκη URL στις Πηγές EPG</span>
-              </button>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-slate-400">
+                  Υποστηρίζει πολλαπλά links, αυτόματη ανίχνευση και ενοποίηση όλων των οδηγών.
+                </span>
+                <button
+                  id="btn-fetch-bulk-epg"
+                  onClick={() => handleFetchCustomXmltvUrl(bulkUrlsText)}
+                  disabled={!bulkUrlsText.trim() || isLoadingXmltv}
+                  className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition disabled:opacity-50 shadow-md shadow-cyan-600/20"
+                >
+                  {isLoadingXmltv ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ListPlus className="w-3.5 h-3.5" />}
+                  <span>+ Μαζική Προσθήκη Όλων των URLs</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Quick-add popular XMLTV EPG presets */}
+          <div className="pt-2 border-t border-slate-800/80 space-y-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block">
+              Δημοφιλείς Έτοιμες Πηγές XMLTV (Άμεση Προσθήκη):
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {POPULAR_EPG_URLS.map((pop) => {
+                const isAlreadyAdded = (epgSources || []).some(
+                  (s) => s.url && s.url.trim().toLowerCase() === pop.url.trim().toLowerCase()
+                );
+                return (
+                  <button
+                    key={pop.url}
+                    type="button"
+                    onClick={() => {
+                      if (!isAlreadyAdded) {
+                        handleFetchCustomXmltvUrl(pop.url);
+                      }
+                    }}
+                    disabled={isAlreadyAdded || isLoadingXmltv}
+                    className={`text-xs px-3 py-1.5 rounded-lg border transition flex items-center gap-2 ${
+                      isAlreadyAdded
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 opacity-80 cursor-default'
+                        : 'bg-slate-900 border-slate-700/80 text-slate-300 hover:text-white hover:border-cyan-500/50 hover:bg-slate-850'
+                    }`}
+                    title={pop.description}
+                  >
+                    <span className="font-bold text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700">
+                      {pop.badge}
+                    </span>
+                    <span className="font-medium">{pop.name}</span>
+                    {isAlreadyAdded ? (
+                      <Check className="w-3 h-3 text-emerald-400" />
+                    ) : (
+                      <Plus className="w-3 h-3 text-cyan-400" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 

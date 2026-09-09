@@ -1,6 +1,27 @@
 import { EpgChannel, EpgSourceItem } from '../types';
 import { EPG_PRESETS, getPresetChannels, GREEK_EPG_DATABASE } from '../data/epgPresets';
 
+function getSafeHostname(urlStr: string): string {
+  try {
+    const u = new URL(urlStr);
+    return u.hostname || urlStr;
+  } catch {
+    return urlStr;
+  }
+}
+
+/**
+ * Extract clean URLs from a string containing one or multiple URLs
+ * separated by commas, semicolons, or newlines.
+ */
+export function extractUrlsFromString(input: string): string[] {
+  if (!input || !input.trim()) return [];
+  return input
+    .split(/[\n,;\s]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.startsWith('http://') || s.startsWith('https://'));
+}
+
 export function createDefaultEpgSources(): EpgSourceItem[] {
   const greekChannels = getPresetChannels('greek_full');
   return [
@@ -113,9 +134,10 @@ export function addUrlEpgSource(
     (s) => s.type === 'custom_url' && s.url === cleanUrl
   );
 
+  const hostname = getSafeHostname(cleanUrl);
   const newSource: EpgSourceItem = {
     id: `url-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-    name: name || `XMLTV EPG (${new URL(cleanUrl).hostname || 'Web'})`,
+    name: name || `XMLTV EPG (${hostname})`,
     type: 'custom_url',
     url: cleanUrl,
     channelCount: channels.length,
@@ -123,7 +145,7 @@ export function addUrlEpgSource(
     loadedAt: new Date().toLocaleTimeString('el-GR'),
     channels: channels.map((c) => ({
       ...c,
-      sourceName: name || 'Custom XMLTV URL',
+      sourceName: name || `XMLTV (${hostname})`,
       sourceId: cleanUrl,
     })),
   };
@@ -135,6 +157,20 @@ export function addUrlEpgSource(
   }
 
   return [...currentSources, newSource];
+}
+
+/**
+ * Add multiple custom XMLTV URL sources at once
+ */
+export function addMultipleUrlEpgSources(
+  currentSources: EpgSourceItem[],
+  items: Array<{ url: string; name?: string; channels: EpgChannel[] }>
+): EpgSourceItem[] {
+  let result = [...currentSources];
+  for (const item of items) {
+    result = addUrlEpgSource(result, item.url, item.name || '', item.channels);
+  }
+  return result;
 }
 
 /**
