@@ -14,18 +14,27 @@ import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { ManualEpgModal } from './components/ManualEpgModal';
 import { GithubHostingModal } from './components/GithubHostingModal';
 import { SavedAccountsModal } from './components/SavedAccountsModal';
-import { Channel, EpgChannel, SourceConfig, SyncSchedule, SavedAccountProfile } from './types';
+import { Channel, EpgChannel, SourceConfig, SyncSchedule, SavedAccountProfile, EpgSourceItem } from './types';
 import { INITIAL_DEMO_CHANNELS } from './data/demoData';
 import { EPG_PRESETS, GREEK_EPG_DATABASE, getPresetChannels } from './data/epgPresets';
 import { parseXMLTV } from './utils/xmltvParser';
 import { parseM3U } from './utils/m3uParser';
 import { runAutoMatchOnChannels } from './utils/epgMatcher';
 import { getSavedProfiles, upsertProfile, getActiveProfileId, setActiveProfileId } from './utils/profileStorage';
+import {
+  createDefaultEpgSources,
+  mergeEpgSources,
+  buildEffectiveEpgUrl,
+  addOrTogglePresetSource,
+  addUrlEpgSource,
+  addFileEpgSource,
+  toggleEpgSource,
+  removeEpgSource,
+} from './utils/epgSourcesHelper';
 
 export default function App() {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [channels, setChannels] = useState<Channel[]>(INITIAL_DEMO_CHANNELS);
-  const [epgDatabase, setEpgDatabase] = useState<EpgChannel[]>(GREEK_EPG_DATABASE);
 
   // Saved Account Profiles (Local Storage)
   const [savedProfiles, setSavedProfiles] = useState<SavedAccountProfile[]>(() => getSavedProfiles());
@@ -41,8 +50,16 @@ export default function App() {
     const initialProfiles = getSavedProfiles();
     const activeId = getActiveProfileId();
     const matched = initialProfiles.find((p) => p.id === activeId) || initialProfiles[0];
+    const defaultSources = createDefaultEpgSources();
+
     if (matched && matched.sourceConfig) {
-      return matched.sourceConfig;
+      return {
+        ...matched.sourceConfig,
+        epgSources:
+          matched.sourceConfig.epgSources && matched.sourceConfig.epgSources.length > 0
+            ? matched.sourceConfig.epgSources
+            : defaultSources,
+      };
     }
     return {
       type: 'demo',
@@ -55,7 +72,12 @@ export default function App() {
       epgPresetId: 'greek_default',
       epgSourceType: 'preset',
       loadedAt: 'Προεπιλεγμένο Demo',
+      epgSources: defaultSources,
     };
+  });
+
+  const [epgDatabase, setEpgDatabase] = useState<EpgChannel[]>(() => {
+    return mergeEpgSources(sourceConfig.epgSources || createDefaultEpgSources());
   });
 
   const [syncSchedule, setSyncSchedule] = useState<SyncSchedule>({
@@ -68,6 +90,64 @@ export default function App() {
   const [previewChannel, setPreviewChannel] = useState<Channel | null>(null);
   const [manualMappingChannel, setManualMappingChannel] = useState<Channel | null>(null);
   const [isGithubModalOpen, setIsGithubModalOpen] = useState<boolean>(false);
+
+  // Multi-EPG synchronizer: merges sources and updates EPG database + auto-match
+  const updateSourcesAndEpg = (newSources: EpgSourceItem[]) => {
+    const mergedDb = mergeEpgSources(newSources);
+    const effectiveUrl = buildEffectiveEpgUrl(newSources);
+
+    setEpgDatabase(mergedDb);
+    setSourceConfig((prev) => ({
+      ...prev,
+      epgSources: newSources,
+      epgUrl: effectiveUrl,
+      epgLoadedAt: new Date().toLocaleTimeString('el-GR'),
+    }));
+
+    if (mergedDb.length > 0) {
+      setChannels((prev) => runAutoMatchOnChannels(prev, mergedDb));
+    }
+  };
+
+  const handleToggleEpgSource = (sourceId: string) => {
+    const current = sourceConfig.epgSources && sourceConfig.epgSources.length > 0
+      ? sourceConfig.epgSources
+      : createDefaultEpgSources();
+    const updated = toggleEpgSource(current, sourceId);
+    updateSourcesAndEpg(updated);
+  };
+
+  const handleRemoveEpgSource = (sourceId: string) => {
+    const current = sourceConfig.epgSources && sourceConfig.epgSources.length > 0
+      ? sourceConfig.epgSources
+      : createDefaultEpgSources();
+    const updated = removeEpgSource(current, sourceId);
+    updateSourcesAndEpg(updated);
+  };
+
+  const handleAddOrTogglePreset = (presetId: string) => {
+    const current = sourceConfig.epgSources && sourceConfig.epgSources.length > 0
+      ? sourceConfig.epgSources
+      : createDefaultEpgSources();
+    const updated = addOrTogglePresetSource(current, presetId);
+    updateSourcesAndEpg(updated);
+  };
+
+  const handleAddUrlSource = (url: string, name: string, parsedChannels: EpgChannel[]) => {
+    const current = sourceConfig.epgSources && sourceConfig.epgSources.length > 0
+      ? sourceConfig.epgSources
+      : createDefaultEpgSources();
+    const updated = addUrlEpgSource(current, url, name, parsedChannels);
+    updateSourcesAndEpg(updated);
+  };
+
+  const handleAddFileSource = (fileName: string, parsedChannels: EpgChannel[]) => {
+    const current = sourceConfig.epgSources && sourceConfig.epgSources.length > 0
+      ? sourceConfig.epgSources
+      : createDefaultEpgSources();
+    const updated = addFileEpgSource(current, fileName, parsedChannels);
+    updateSourcesAndEpg(updated);
+  };
 
   // Load custom M3U text (from URL or file)
   const handleLoadM3uContent = (content: string, sourceName: string) => {
@@ -84,21 +164,9 @@ export default function App() {
     }
   };
 
-  // Switch EPG Preset (Greek, International, All-in-One, etc.)
+  // Switch/Toggle EPG Preset
   const handleSelectEpgPreset = (presetId: string) => {
-    const preset = EPG_PRESETS.find((p) => p.id === presetId);
-    if (!preset) return;
-    const channelsForPreset = getPresetChannels(presetId);
-    setEpgDatabase(channelsForPreset);
-    setSourceConfig((prev) => ({
-      ...prev,
-      epgSourceType: 'preset',
-      epgPresetId: presetId,
-      epgUrl: preset.url,
-      epgLoadedAt: new Date().toLocaleTimeString('el-GR'),
-    }));
-    // Re-run auto match with the newly selected EPG database
-    setChannels((prev) => runAutoMatchOnChannels(prev, channelsForPreset));
+    handleAddOrTogglePreset(presetId);
   };
 
   // Load Custom XMLTV EPG from URL or file
@@ -111,27 +179,18 @@ export default function App() {
         console.warn('XMLTV parse failed', err);
       }
     }
-    const finalEpgDb = parsed.length > 0 ? parsed : epgDatabase;
-    if (parsed.length > 0) {
-      setEpgDatabase(parsed);
-    }
-    setSourceConfig((prev) => ({
-      ...prev,
-      epgSourceType: customUrl ? 'custom_url' : 'custom_file',
-      customEpgUrl: customUrl || prev.customEpgUrl,
-      epgUrl: customUrl || prev.epgUrl,
-      epgFileName: customUrl ? undefined : sourceName,
-      epgLoadedAt: new Date().toLocaleTimeString('el-GR'),
-    }));
-    if (parsed.length > 0) {
-      setChannels((prev) => runAutoMatchOnChannels(prev, finalEpgDb));
+    if (customUrl) {
+      handleAddUrlSource(customUrl, `XMLTV: ${customUrl}`, parsed);
+    } else {
+      handleAddFileSource(sourceName, parsed);
     }
   };
 
   // Reset to initial demo profile
   const handleResetToDemo = () => {
+    const defaultSources = createDefaultEpgSources();
     setChannels(INITIAL_DEMO_CHANNELS);
-    setEpgDatabase(GREEK_EPG_DATABASE);
+    setEpgDatabase(mergeEpgSources(defaultSources));
     setSourceConfig({
       type: 'demo',
       m3uUrl: '',
@@ -143,6 +202,7 @@ export default function App() {
       epgPresetId: 'greek_default',
       epgSourceType: 'preset',
       loadedAt: 'Demo Ελληνικό Πακέτο',
+      epgSources: defaultSources,
     });
     setCurrentStep(1);
   };
@@ -153,8 +213,10 @@ export default function App() {
     setActiveProfileIdState(profile.id);
     setActiveProfileId(profile.id);
 
-    // If profile had a preset EPG, switch DB
-    if (profile.sourceConfig.epgSourceType === 'preset' && profile.sourceConfig.epgPresetId) {
+    // If profile has multi-EPG sources, merge them
+    if (profile.sourceConfig.epgSources && profile.sourceConfig.epgSources.length > 0) {
+      setEpgDatabase(mergeEpgSources(profile.sourceConfig.epgSources));
+    } else if (profile.sourceConfig.epgSourceType === 'preset' && profile.sourceConfig.epgPresetId) {
       const channelsForPreset = getPresetChannels(profile.sourceConfig.epgPresetId);
       setEpgDatabase(channelsForPreset);
     }
@@ -310,6 +372,12 @@ export default function App() {
             onSelectProfile={handleSelectProfile}
             onOpenSavedAccountsModal={() => setIsSavedAccountsModalOpen(true)}
             onSaveCurrentAsProfile={handleSaveCurrentAsProfile}
+            epgSources={sourceConfig.epgSources || []}
+            onToggleEpgSource={handleToggleEpgSource}
+            onRemoveEpgSource={handleRemoveEpgSource}
+            onAddOrTogglePreset={handleAddOrTogglePreset}
+            onAddUrlSource={handleAddUrlSource}
+            onAddFileSource={handleAddFileSource}
           />
         )}
 

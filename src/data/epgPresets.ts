@@ -282,15 +282,31 @@ export const EPG_PRESETS: EpgPreset[] = [
 export function getPresetChannels(presetId: string): EpgChannel[] {
   switch (presetId) {
     case 'international_sports':
-      return INTERNATIONAL_EPG_DATABASE;
+      return INTERNATIONAL_EPG_DATABASE.map((c) => ({
+        ...c,
+        sourceName: 'Διεθνές & Αθλητικό',
+        sourceId: 'international_sports',
+      }));
     case 'all_in_one':
-      return COMBINED_EPG_DATABASE;
+      return COMBINED_EPG_DATABASE.map((c) => ({
+        ...c,
+        sourceName: 'Συνδυαστικό (All-in-One)',
+        sourceId: 'all_in_one',
+      }));
     case 'iptv_org_gr':
-      return GREEK_EPG_DATABASE;
+      return GREEK_EPG_DATABASE.map((c) => ({
+        ...c,
+        sourceName: 'IPTV-Org Greek',
+        sourceId: 'iptv_org_gr',
+      }));
     case 'greek_full':
     case 'greek_default':
     default:
-      return GREEK_EPG_DATABASE;
+      return GREEK_EPG_DATABASE.map((c) => ({
+        ...c,
+        sourceName: 'Ελληνικό Πακέτο',
+        sourceId: 'greek_full',
+      }));
   }
 }
 

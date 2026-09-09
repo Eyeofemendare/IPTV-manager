@@ -75,7 +75,9 @@ export const Step4CloudSync: React.FC<Step4CloudSyncProps> = ({
 
   // Download M3U
   const handleDownloadM3U = () => {
-    const content = generateM3U(channels, simulatedEpgCloudUrl);
+    // If multi-EPG is active, use the combined URLs or fallback to cloud URL
+    const effectiveEpg = sourceConfig?.epgUrl || simulatedEpgCloudUrl;
+    const content = generateM3U(channels, effectiveEpg);
     const blob = new Blob([content], { type: 'audio/x-mpegurl;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -339,6 +341,33 @@ jobs:
                   <span>{copiedType === 'epg' ? 'OK!' : 'Copy'}</span>
                 </button>
               </div>
+
+              {/* Multi-EPG Sources badge when 2+ sources are active */}
+              {sourceConfig?.epgSources && sourceConfig.epgSources.filter((s) => s.enabled).length >= 2 && (
+                <div className="p-3 bg-cyan-950/40 border border-cyan-800/50 rounded-xl space-y-1.5 mt-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-cyan-300">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                      Πολυ-πηγικό EPG ({sourceConfig.epgSources.filter((s) => s.enabled).length} ενεργές πηγές)
+                    </span>
+                    <span className="text-[10px] text-emerald-400 font-normal">
+                      Ενοποιημένα στο M3U Header
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    {sourceConfig.epgSources
+                      .filter((s) => s.enabled)
+                      .map((s) => (
+                        <span
+                          key={s.id}
+                          className="text-[10px] px-2 py-0.5 rounded bg-slate-900/90 border border-slate-700 text-slate-200 font-medium"
+                        >
+                          ✓ {s.name} ({s.channelCount ?? s.channels?.length ?? 0} ch)
+                        </span>
+                      ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Direct File Download Row */}

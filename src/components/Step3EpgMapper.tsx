@@ -199,35 +199,40 @@ export const Step3EpgMapper: React.FC<Step3EpgMapperProps> = ({
           {/* Presets Chips */}
           <div className="flex flex-wrap items-center gap-2">
             {EPG_PRESETS.filter((p) => p.id !== 'custom_url').map((preset) => {
-              const isSelected =
-                sourceConfig.epgSourceType === 'preset' && sourceConfig.epgPresetId === preset.id;
+              const matchedSource = sourceConfig.epgSources?.find((s) => s.presetId === preset.id);
+              const isEnabled = matchedSource ? matchedSource.enabled : (sourceConfig.epgSourceType === 'preset' && sourceConfig.epgPresetId === preset.id);
+
               return (
                 <button
                   key={preset.id}
                   onClick={() => handlePresetSwitch(preset.id)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
-                    isSelected
+                    isEnabled
                       ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20 font-bold'
                       : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700'
                   }`}
                 >
                   <span>{preset.badge}</span>
                   <span>{preset.name}</span>
+                  {isEnabled && <Check className="w-3 h-3 stroke-[3]" />}
                   <span className="text-[10px] opacity-75">({preset.channelCount})</span>
                 </button>
               );
             })}
 
-            {sourceConfig.epgSourceType === 'custom_url' && (
-              <span className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
-                <Globe className="w-3 h-3" /> Custom XMLTV URL
+            {/* If custom URL sources exist */}
+            {sourceConfig.epgSources && sourceConfig.epgSources.filter(s => s.type === 'custom_url' && s.enabled).map(s => (
+              <span key={s.id} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                <Globe className="w-3 h-3" /> {s.name}
               </span>
-            )}
-            {sourceConfig.epgSourceType === 'custom_file' && (
-              <span className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                <Upload className="w-3 h-3" /> {sourceConfig.epgFileName || 'Custom File'}
+            ))}
+
+            {/* If custom File sources exist */}
+            {sourceConfig.epgSources && sourceConfig.epgSources.filter(s => s.type === 'custom_file' && s.enabled).map(s => (
+              <span key={s.id} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                <Upload className="w-3 h-3" /> {s.name}
               </span>
-            )}
+            ))}
           </div>
 
           {/* Expandable Custom URL Box */}

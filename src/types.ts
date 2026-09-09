@@ -13,6 +13,21 @@ export interface EpgChannel {
   category: string;
   currentShow: EpgProgram;
   nextShow: EpgProgram;
+  sourceName?: string; // e.g. "Ελληνικό Πακέτο", "Διεθνές EPG", "Provider XMLTV"
+  sourceId?: string;
+}
+
+export interface EpgSourceItem {
+  id: string;
+  name: string;
+  type: 'preset' | 'custom_url' | 'custom_file';
+  url?: string;
+  channelCount: number;
+  enabled: boolean;
+  loadedAt?: string;
+  presetId?: string;
+  fileName?: string;
+  channels: EpgChannel[];
 }
 
 export interface Channel {
@@ -59,13 +74,14 @@ export interface SourceConfig {
   xtreamUser: string;
   xtreamPass: string;
   epgUrl: string;
-  epgSourceType: 'preset' | 'custom_url' | 'custom_file';
+  epgSourceType: 'preset' | 'custom_url' | 'custom_file' | 'multi';
   epgPresetId: string;
   customEpgUrl?: string;
   epgFileName?: string;
   fileName?: string;
   loadedAt?: string;
   epgLoadedAt?: string;
+  epgSources?: EpgSourceItem[];
 }
 
 export interface PingResult {

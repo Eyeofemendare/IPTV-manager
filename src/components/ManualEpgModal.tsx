@@ -169,7 +169,14 @@ export const ManualEpgModal: React.FC<ManualEpgModalProps> = ({
                       </div>
                     )}
                     <div className="overflow-hidden min-w-0">
-                      <div className="text-xs font-bold text-white truncate">{epg.displayName}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-white truncate">{epg.displayName}</span>
+                        {epg.sourceName && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700 truncate max-w-[130px]">
+                            {epg.sourceName}
+                          </span>
+                        )}
+                      </div>
                       <div className="text-[11px] font-mono text-cyan-400 truncate">{epg.id}</div>
                     </div>
                   </div>

@@ -97,9 +97,18 @@ export function cleanChannelTitle(name: string): string {
     .trim();
 }
 
-export function generateM3U(channels: Channel[], epgUrl?: string): string {
+export function generateM3U(channels: Channel[], epgUrl?: string | string[]): string {
   const selectedChannels = channels.filter((c) => c.selected);
-  const effectiveEpgUrl = epgUrl || 'https://iptv-manager.cloud/epg/greece.xml';
+  let effectiveEpgUrl = 'https://iptv-manager.cloud/epg/greece.xml';
+
+  if (Array.isArray(epgUrl)) {
+    const valid = epgUrl.map((u) => u.trim()).filter((u) => u.length > 0);
+    if (valid.length > 0) {
+      effectiveEpgUrl = valid.join(',');
+    }
+  } else if (epgUrl && epgUrl.trim().length > 0) {
+    effectiveEpgUrl = epgUrl.trim();
+  }
 
   let output = `#EXTM3U x-tvg-url="${effectiveEpgUrl}" url-tvg="${effectiveEpgUrl}"\n\n`;
 
